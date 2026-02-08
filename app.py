@@ -147,6 +147,12 @@ async def fetch_stock_data() -> dict:
                         stock_info["52w_high"] = qt[48] if len(qt) > 48 else "--"
                         stock_info["52w_low"] = qt[49] if len(qt) > 49 else "--"
                         stock_info["dividend_yield"] = qt[47] if len(qt) > 47 else "--"
+                        stock_info["pb_ratio"] = qt[51] if len(qt) > 51 else "--"
+                        stock_info["turnover_rate"] = qt[50] if len(qt) > 50 else "--"
+                        stock_info["amplitude"] = qt[43] if len(qt) > 43 else "--"
+                        stock_info["total_shares"] = qt[69] if len(qt) > 69 else "--"
+                        stock_info["float_shares"] = qt[70] if len(qt) > 70 else "--"
+                        stock_info["nav_per_share"] = qt[72] if len(qt) > 72 else "--"
     except Exception as e:
         print(f"[Stock] 腾讯接口异常: {e}")
 

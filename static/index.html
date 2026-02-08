@@ -36,123 +36,127 @@
 
     <!-- 主体内容 -->
     <main class="main-container">
-        <!-- 股票核心信息卡片 -->
+        <!-- 股票核心信息横条 -->
         <section class="stock-hero" id="stockHero">
             <div class="hero-loading">
                 <div class="skeleton-loader"></div>
             </div>
         </section>
 
-        <!-- 数据面板区域 -->
+        <!-- K线走势图（全宽紧凑） -->
+        <section class="card card-chart">
+            <div class="card-header">
+                <h2>价格走势</h2>
+                <div class="chart-controls">
+                    <div class="chart-tabs" id="rangeTabs">
+                        <button class="tab active" data-range="30d">30日</button>
+                        <button class="tab" data-range="60d">60日</button>
+                        <button class="tab" data-range="6m">半年</button>
+                        <button class="tab" data-range="1y">1年</button>
+                        <button class="tab" data-range="5y">5年</button>
+                        <button class="tab" data-range="all">全部</button>
+                    </div>
+                    <div class="chart-tabs" id="periodTabs">
+                        <button class="tab active" data-period="day">日K</button>
+                        <button class="tab" data-period="week">周K</button>
+                        <button class="tab" data-period="month">月K</button>
+                    </div>
+                </div>
+            </div>
+            <div class="card-body">
+                <canvas id="priceChart" width="800" height="220"></canvas>
+            </div>
+        </section>
+
+        <!-- 下方：AI内容（左） + 新闻（右） -->
         <div class="dashboard-grid">
-            <!-- K线图 -->
-            <section class="card card-chart">
-                <div class="card-header">
-                    <h2>价格走势</h2>
-                    <div class="chart-controls">
-                        <div class="chart-tabs" id="rangeTabs">
-                            <button class="tab active" data-range="30d">30日</button>
-                            <button class="tab" data-range="60d">60日</button>
-                            <button class="tab" data-range="6m">半年</button>
-                            <button class="tab" data-range="1y">1年</button>
-                            <button class="tab" data-range="5y">5年</button>
-                            <button class="tab" data-range="all">全部</button>
-                        </div>
-                        <div class="chart-tabs" id="periodTabs">
-                            <button class="tab active" data-period="day">日K</button>
-                            <button class="tab" data-period="week">周K</button>
-                            <button class="tab" data-period="month">月K</button>
-                        </div>
-                    </div>
-                </div>
-                <div class="card-body">
-                    <canvas id="priceChart" width="800" height="350"></canvas>
-                </div>
-            </section>
-
-            <!-- 新闻列表 -->
-            <section class="card card-news">
-                <div class="card-header">
-                    <h2>实时资讯</h2>
-                    <span class="badge" id="newsCount">0</span>
-                </div>
-                <div class="card-body">
-                    <div class="news-list" id="newsList">
-                        <div class="news-loading">
-                            <div class="skeleton-line"></div>
-                            <div class="skeleton-line short"></div>
-                            <div class="skeleton-line"></div>
-                            <div class="skeleton-line short"></div>
+            <!-- 左列：AI -->
+            <div class="col-main">
+                <!-- AI 新闻摘要 -->
+                <section class="card card-summary">
+                    <div class="card-header">
+                        <h2>
+                            <span class="ai-icon">✦</span>
+                            AI 新闻摘要
+                        </h2>
+                        <div class="summary-meta">
+                            <span class="summary-time" id="summaryTime">--</span>
+                            <button class="btn-refresh-sm" id="btnRefreshSummary" onclick="fetchSummary()" title="刷新摘要">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <polyline points="23 4 23 10 17 10"></polyline>
+                                    <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10"></path>
+                                </svg>
+                            </button>
                         </div>
                     </div>
-                </div>
-            </section>
-        </div>
-
-        <!-- AI 新闻摘要 -->
-        <section class="card card-summary">
-            <div class="card-header">
-                <h2>
-                    <span class="ai-icon">✦</span>
-                    AI 新闻摘要
-                </h2>
-                <div class="summary-meta">
-                    <span class="summary-time" id="summaryTime">--</span>
-                    <button class="btn-refresh-sm" id="btnRefreshSummary" onclick="fetchSummary()" title="刷新摘要">
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <polyline points="23 4 23 10 17 10"></polyline>
-                            <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10"></path>
-                        </svg>
-                    </button>
-                </div>
-            </div>
-            <div class="card-body">
-                <div class="summary-content" id="summaryContent">
-                    <div class="analysis-placeholder" style="min-height:120px">
-                        <p style="color:var(--text-tertiary);font-size:14px">新闻摘要加载中...</p>
+                    <div class="card-body">
+                        <div class="summary-content" id="summaryContent">
+                            <div class="analysis-placeholder" style="min-height:100px">
+                                <p style="color:var(--text-tertiary);font-size:14px">新闻摘要加载中...</p>
+                            </div>
+                        </div>
                     </div>
-                </div>
-            </div>
-        </section>
+                </section>
 
-        <!-- AI 深度分析 + 自定义提问 -->
-        <section class="card card-analysis">
-            <div class="card-header">
-                <h2>
-                    <span class="ai-icon">✦</span>
-                    AI 深度分析
-                </h2>
-                <button class="btn-generate" id="btnAnalysis" onclick="generateAnalysis()">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
-                    </svg>
-                    生成分析报告
-                </button>
-            </div>
-            <div class="card-body">
-                <!-- 自定义提问输入框 -->
-                <div class="chat-input-wrap">
-                    <input type="text" id="chatInput" class="chat-input" placeholder="输入你的问题，例如：腾讯目前估值是否合理？短期能否买入？" />
-                    <button class="chat-send-btn" id="btnChat" onclick="sendChat()">
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <line x1="22" y1="2" x2="11" y2="13"></line>
-                            <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
-                        </svg>
-                    </button>
-                </div>
-                <div class="analysis-content" id="analysisContent">
-                    <div class="analysis-placeholder">
-                        <div class="placeholder-icon">
-                            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" opacity="0.4">
-                                <path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2zm0 18a8 8 0 1 1 8-8 8 8 0 0 1-8 8z"/>
-                                <path d="M12 6v6l4 2"/>
+                <!-- AI 深度分析 + 自定义提问 -->
+                <section class="card card-analysis">
+                    <div class="card-header">
+                        <h2>
+                            <span class="ai-icon">✦</span>
+                            AI 深度分析
+                        </h2>
+                        <button class="btn-generate" id="btnAnalysis" onclick="generateAnalysis()">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
                             </svg>
-                        </div>
-                        <p>点击「生成分析报告」获取完整分析，或输入自定义问题进行提问</p>
+                            生成分析报告
+                        </button>
                     </div>
-                </div>
+                    <div class="card-body">
+                        <div class="chat-input-wrap">
+                            <input type="text" id="chatInput" class="chat-input" placeholder="输入你的问题，例如：腾讯目前估值是否合理？短期能否买入？" />
+                            <button class="chat-send-btn" id="btnChat" onclick="sendChat()">
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <line x1="22" y1="2" x2="11" y2="13"></line>
+                                    <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+                                </svg>
+                            </button>
+                        </div>
+                        <div class="analysis-content" id="analysisContent">
+                            <div class="analysis-placeholder">
+                                <div class="placeholder-icon">
+                                    <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" opacity="0.4">
+                                        <path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2zm0 18a8 8 0 1 1 8-8 8 8 0 0 1-8 8z"/>
+                                        <path d="M12 6v6l4 2"/>
+                                    </svg>
+                                </div>
+                                <p>点击「生成分析报告」或输入自定义问题进行提问</p>
+                            </div>
+                        </div>
+                    </div>
+                </section>
             </div>
-        </section>
+
+            <!-- 右列：新闻 -->
+            <div class="col-side">
+                <section class="card card-news">
+                    <div class="card-header">
+                        <h2>实时资讯</h2>
+                        <span class="badge" id="newsCount">0</span>
+                    </div>
+                    <div class="card-body">
+                        <div class="news-list" id="newsList">
+                            <div class="news-loading">
+                                <div class="skeleton-line"></div>
+                                <div class="skeleton-line short"></div>
+                                <div class="skeleton-line"></div>
+                                <div class="skeleton-line short"></div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+            </div>
+        </div>
     </main>
 
     <!-- 底部 -->

@@ -6,6 +6,12 @@
 ![FastAPI](https://img.shields.io/badge/FastAPI-0.109-green)
 ![License](https://img.shields.io/badge/License-MIT-yellow)
 
+## 页面预览
+
+![页面上半部分 — 股票行情横条 + K线走势 + AI摘要 + 实时资讯](docs/screenshot-top.png)
+
+![页面下半部分 — AI深度分析 + 更多资讯](docs/screenshot-bottom.png)
+
 ---
 
 ## 功能特性
@@ -13,7 +19,9 @@
 ### 📊 实时股票数据
 - 实时获取腾讯控股（00700.HK）港股行情
 - 展示当前价格、涨跌幅、成交量、成交额等核心指标
-- 市盈率（PE）、总市值、52 周最高 / 最低等估值数据
+- 市盈率（PE）、市净率（PB）、总市值、52 周最高 / 最低等估值数据
+- 振幅、换手率、总股本、流通股、每股净资产、股息率等扩展指标
+- 紧凑横条式布局，一行展示 17 项关键数据
 - 数据来源：新浪港股 + 腾讯财经，双源互补确保可靠性
 
 ### 📈 K 线走势图
@@ -77,6 +85,9 @@ tencent-stock/
 ├── .env.example           # 环境变量配置模板
 ├── .env                   # 实际环境变量配置（需自行创建，已被 .gitignore 忽略）
 ├── .gitignore
+├── docs/
+│   ├── screenshot-top.png    # 页面预览截图（上半部分）
+│   └── screenshot-bottom.png # 页面预览截图（下半部分）
 └── static/
     ├── index.html         # 主页面
     ├── style.css          # Apple 风格样式表
@@ -296,6 +307,12 @@ python -m uvicorn app:app --host 0.0.0.0 --port 8000 --reload
     "turnover": "19472346757.185",
     "market_cap": "49857.2998",
     "pe_ratio": "23.79",
+    "pb_ratio": "7.12",
+    "turnover_rate": "0.37",
+    "amplitude": "2.60",
+    "total_shares": "9483781440",
+    "float_shares": "9483781440",
+    "nav_per_share": "76.89",
     "52w_high": "683.000",
     "52w_low": "413.300"
   }
@@ -318,7 +335,7 @@ data: [DONE]
 | 数据类型 | 来源 | 接口 |
 |----------|------|------|
 | 实时行情 | 新浪港股 | `hq.sinajs.cn` |
-| 市盈率 / 市值 / 52 周数据 | 腾讯财经 | `web.ifzq.gtimg.cn` |
+| PE / PB / 市值 / 换手率 / 振幅 / 总股本 / 流通股 / 每股净资产 / 52 周数据 | 腾讯财经 | `web.ifzq.gtimg.cn` |
 | K 线数据 | 腾讯财经 | `web.ifzq.gtimg.cn` |
 | 国内新闻 | 新浪搜索（多维度关键词）、新浪财经滚动 | `search.sina.com.cn`、`feed.mix.sina.com.cn` |
 | 国际新闻 | Google News RSS | `news.google.com/rss` |

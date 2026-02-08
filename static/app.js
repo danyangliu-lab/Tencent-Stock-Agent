@@ -1,5 +1,5 @@
 /**
- * 腾讯股票 AI Agent - 前端交互逻辑
+ * 腾讯股票小助手 AI Agent - 前端交互逻辑
  */
 
 // ============ 状态管理 ============
@@ -59,11 +59,19 @@ function formatTurnover(val) {
     if (!val || val === '--') return '--';
     const n = parseFloat(val);
     if (isNaN(n)) return val;
-    // 成交额单位是港元
     if (n >= 1e12) return (n / 1e12).toFixed(2) + '万亿';
     if (n >= 1e8) return (n / 1e8).toFixed(2) + '亿';
     if (n >= 1e4) return (n / 1e4).toFixed(0) + '万';
     return n.toLocaleString();
+}
+
+function formatShares(val) {
+    if (!val || val === '--' || val === '0') return '--';
+    const n = parseFloat(val);
+    if (isNaN(n)) return val;
+    if (n >= 1e8) return (n / 1e8).toFixed(2) + '亿股';
+    if (n >= 1e4) return (n / 1e4).toFixed(0) + '万股';
+    return n.toLocaleString() + '股';
 }
 
 // 简易Markdown渲染
@@ -188,63 +196,36 @@ function renderStockHero() {
     const sign = changeNum > 0 ? '+' : '';
 
     el.innerHTML = `
-        <div class="hero-top fade-in">
-            <div class="hero-left">
-                <div class="hero-title">
-                    <h1>${d.name || '腾讯控股'}</h1>
-                    <span class="code">${d.code || '00700.HK'}</span>
-                </div>
-                <div class="hero-price">
-                    <span class="price-current">${d.current_price || '--'}</span>
-                    <span class="price-unit">HKD</span>
-                </div>
-                <div class="price-change">
-                    <span class="change-badge ${direction}">
-                        ${arrow} ${sign}${d.change || '--'} (${sign}${changePct}%)
-                    </span>
-                </div>
+        <div class="hero-compact fade-in">
+            <div class="hero-identity">
+                <h1>${d.name || '腾讯控股'}</h1>
+                <span class="code">${d.code || '00700.HK'}</span>
             </div>
-        </div>
-        <div class="hero-metrics fade-in">
-            <div class="metric">
-                <div class="metric-label">今开</div>
-                <div class="metric-value">${d.open || '--'}</div>
+            <div class="hero-price-group">
+                <span class="price-current">${d.current_price || '--'}</span>
+                <span class="price-unit">HKD</span>
+                <span class="change-badge ${direction}">
+                    ${arrow} ${sign}${d.change || '--'} (${sign}${changePct}%)
+                </span>
             </div>
-            <div class="metric">
-                <div class="metric-label">最高</div>
-                <div class="metric-value">${d.high || '--'}</div>
-            </div>
-            <div class="metric">
-                <div class="metric-label">最低</div>
-                <div class="metric-value">${d.low || '--'}</div>
-            </div>
-            <div class="metric">
-                <div class="metric-label">昨收</div>
-                <div class="metric-value">${d.prev_close || '--'}</div>
-            </div>
-            <div class="metric">
-                <div class="metric-label">成交量</div>
-                <div class="metric-value">${formatVolume(d.volume)}</div>
-            </div>
-            <div class="metric">
-                <div class="metric-label">成交额</div>
-                <div class="metric-value">${formatTurnover(d.turnover)}</div>
-            </div>
-            <div class="metric">
-                <div class="metric-label">市盈率</div>
-                <div class="metric-value">${d.pe_ratio || '--'}</div>
-            </div>
-            <div class="metric">
-                <div class="metric-label">市值</div>
-                <div class="metric-value">${formatMarketCap(d.market_cap)}</div>
-            </div>
-            <div class="metric">
-                <div class="metric-label">52周最高</div>
-                <div class="metric-value">${d['52w_high'] || '--'}</div>
-            </div>
-            <div class="metric">
-                <div class="metric-label">52周最低</div>
-                <div class="metric-value">${d['52w_low'] || '--'}</div>
+            <div class="hero-metrics-inline">
+                <div class="metric-inline"><span class="ml">今开</span><span class="mv">${d.open || '--'}</span></div>
+                <div class="metric-inline"><span class="ml">最高</span><span class="mv">${d.high || '--'}</span></div>
+                <div class="metric-inline"><span class="ml">最低</span><span class="mv">${d.low || '--'}</span></div>
+                <div class="metric-inline"><span class="ml">昨收</span><span class="mv">${d.prev_close || '--'}</span></div>
+                <div class="metric-inline"><span class="ml">成交量</span><span class="mv">${formatVolume(d.volume)}</span></div>
+                <div class="metric-inline"><span class="ml">成交额</span><span class="mv">${formatTurnover(d.turnover)}</span></div>
+                <div class="metric-inline"><span class="ml">振幅</span><span class="mv">${d.amplitude ? d.amplitude + '%' : '--'}</span></div>
+                <div class="metric-inline"><span class="ml">换手率</span><span class="mv">${d.turnover_rate ? d.turnover_rate + '%' : '--'}</span></div>
+                <div class="metric-inline"><span class="ml">PE</span><span class="mv">${d.pe_ratio || '--'}</span></div>
+                <div class="metric-inline"><span class="ml">PB</span><span class="mv">${d.pb_ratio || '--'}</span></div>
+                <div class="metric-inline"><span class="ml">市值</span><span class="mv">${formatMarketCap(d.market_cap)}</span></div>
+                <div class="metric-inline"><span class="ml">总股本</span><span class="mv">${formatShares(d.total_shares)}</span></div>
+                <div class="metric-inline"><span class="ml">流通股</span><span class="mv">${formatShares(d.float_shares)}</span></div>
+                <div class="metric-inline"><span class="ml">每股净资产</span><span class="mv">${d.nav_per_share || '--'}</span></div>
+                <div class="metric-inline"><span class="ml">股息率</span><span class="mv">${d.dividend_yield ? d.dividend_yield + '%' : '--'}</span></div>
+                <div class="metric-inline"><span class="ml">52周高</span><span class="mv">${d['52w_high'] || '--'}</span></div>
+                <div class="metric-inline"><span class="ml">52周低</span><span class="mv">${d['52w_low'] || '--'}</span></div>
             </div>
         </div>
     `;
