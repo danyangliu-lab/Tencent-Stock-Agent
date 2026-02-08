@@ -7,6 +7,7 @@ const state = {
     stock: null,
     news: [],
     kline: [],
+    rating: null,
     // K线图表当前设置
     chartRange: '30d',   // 30d, 60d, 6m, 1y, 5y, all
     chartPeriod: 'day',  // day, week, month
@@ -181,6 +182,90 @@ async function fetchNewsData() {
     } catch (e) {
         console.error('获取新闻失败:', e);
     }
+}
+
+// ============ AI 每日评级 ============
+async function fetchRating() {
+    try {
+        const resp = await fetch('/api/rating');
+        const json = await resp.json();
+        if (json.code === 0) {
+            state.rating = json.data;
+            renderRatingBar();
+        }
+    } catch (e) {
+        console.error('获取评级失败:', e);
+        renderRatingFallback();
+    }
+}
+
+function getRatingConfig(rating) {
+    const map = {
+        '强烈推荐': { color: '#34c759', bg: 'rgba(52,199,89,0.10)', icon: '🚀', barColor: '#34c759' },
+        '推荐':     { color: '#30d158', bg: 'rgba(48,209,88,0.10)', icon: '👍', barColor: '#30d158' },
+        '中性':     { color: '#ff9500', bg: 'rgba(255,149,0,0.10)', icon: '⚖️', barColor: '#ff9500' },
+        '谨慎':     { color: '#ff6b35', bg: 'rgba(255,107,53,0.10)', icon: '⚠️', barColor: '#ff6b35' },
+        '回避':     { color: '#ff3b30', bg: 'rgba(255,59,48,0.10)', icon: '🛑', barColor: '#ff3b30' },
+    };
+    return map[rating] || map['中性'];
+}
+
+function renderRatingBar() {
+    const el = document.getElementById('ratingBar');
+    const d = state.rating;
+    if (!d) return;
+
+    const cfg = getRatingConfig(d.rating);
+    const score = d.score || 50;
+    const factors = d.factors || {};
+
+    el.innerHTML = `
+        <div class="rating-content fade-in">
+            <div class="rating-left">
+                <div class="rating-badge" style="background:${cfg.bg};color:${cfg.color}">
+                    <span class="rating-icon">${cfg.icon}</span>
+                    <span class="rating-label">${d.rating}</span>
+                </div>
+                <div class="rating-score-wrap">
+                    <div class="rating-score-bar">
+                        <div class="rating-score-fill" style="width:${score}%;background:${cfg.barColor}"></div>
+                    </div>
+                    <span class="rating-score-num" style="color:${cfg.color}">${score}<small>/100</small></span>
+                </div>
+            </div>
+            <div class="rating-center">
+                <p class="rating-summary">${d.summary || '--'}</p>
+                <div class="rating-factors">
+                    <span class="rating-factor"><b>技术面</b> ${factors.technical || '--'}</span>
+                    <span class="rating-factor-sep">|</span>
+                    <span class="rating-factor"><b>基本面</b> ${factors.fundamental || '--'}</span>
+                    <span class="rating-factor-sep">|</span>
+                    <span class="rating-factor"><b>消息面</b> ${factors.sentiment || '--'}</span>
+                </div>
+            </div>
+            <div class="rating-right">
+                <span class="rating-date">${d.date || '--'}</span>
+                <span class="rating-ai-tag"><span class="ai-icon-sm">✦</span> AI 评级</span>
+            </div>
+        </div>
+    `;
+}
+
+function renderRatingFallback() {
+    const el = document.getElementById('ratingBar');
+    el.innerHTML = `
+        <div class="rating-content fade-in">
+            <div class="rating-left">
+                <div class="rating-badge" style="background:rgba(142,142,147,0.12);color:var(--text-tertiary)">
+                    <span class="rating-icon">⚖️</span>
+                    <span class="rating-label">加载失败</span>
+                </div>
+            </div>
+            <div class="rating-center">
+                <p class="rating-summary" style="color:var(--text-tertiary)">评级数据加载失败，请刷新页面重试</p>
+            </div>
+        </div>
+    `;
 }
 
 // ============ 渲染函数 ============
@@ -687,6 +772,8 @@ async function refreshAll() {
         ]);
         document.getElementById('updateTime').textContent =
             '更新于 ' + new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
+        // 刷新后重新获取评级
+        fetchRating();
     } catch (e) {
         console.error('刷新失败:', e);
     }
@@ -736,8 +823,9 @@ async function init() {
     document.getElementById('updateTime').textContent =
         '更新于 ' + new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
 
-    // 初始化加载新闻摘要
+    // 初始化加载新闻摘要和AI评级（不阻塞主流程）
     fetchSummary();
+    fetchRating();
 
     // 自动定时刷新数据 (5分钟)
     setInterval(async () => {

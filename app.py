@@ -47,6 +47,9 @@ async def startup_log():
 _cache: dict = {}
 CACHE_TTL = 300  # 5分钟
 
+# AI 评级每日缓存（key: 日期字符串, value: 评级结果 dict）
+_rating_cache: dict = {}
+
 
 def _get_cache(key: str):
     if key in _cache:
@@ -461,7 +464,22 @@ async def stream_ai_analysis(stock_data: dict, news_list: list, kline_data: list
         return
 
     try:
-        async with httpx.AsyncClient(timeout=60) as client:
+        req_body = {
+            "model": LLM_MODEL,
+            "messages": [
+                {"role": "system", "content": "你是一位资深港股分析师，擅长技术分析和基本面分析。你的分析专业、客观、全面。"},
+                {"role": "user", "content": prompt},
+            ],
+            "stream": True,
+            "temperature": 0.7,
+            "max_tokens": 3000,
+        }
+        # Gemini 2.5 thinking 模型: 用 low 限制思考 token，把更多配额给实际输出
+        if "2.5" in LLM_MODEL:
+            req_body["max_tokens"] = 8000
+            req_body["reasoning_effort"] = "low"
+
+        async with httpx.AsyncClient(timeout=httpx.Timeout(300, connect=15)) as client:
             async with client.stream(
                 "POST",
                 f"{LLM_BASE_URL}/chat/completions",
@@ -469,16 +487,7 @@ async def stream_ai_analysis(stock_data: dict, news_list: list, kline_data: list
                     "Authorization": f"Bearer {LLM_API_KEY}",
                     "Content-Type": "application/json",
                 },
-                json={
-                    "model": LLM_MODEL,
-                    "messages": [
-                        {"role": "system", "content": "你是一位资深港股分析师，擅长技术分析和基本面分析。你的分析专业、客观、全面。"},
-                        {"role": "user", "content": prompt},
-                    ],
-                    "stream": True,
-                    "temperature": 0.7,
-                    "max_tokens": 3000,
-                },
+                json=req_body,
             ) as response:
                 if response.status_code != 200:
                     body = await response.aread()
@@ -690,6 +699,7 @@ async def get_analysis():
 async def refresh_data():
     """刷新缓存，重新获取数据"""
     _cache.clear()
+    _rating_cache.clear()
     stock_data, news_list, kline_data = await asyncio.gather(
         fetch_stock_data(),
         fetch_news(),
@@ -706,6 +716,179 @@ async def refresh_data():
 
 
 # ---------------------------------------------------------------------------
+# AI 每日评级
+# ---------------------------------------------------------------------------
+@app.get("/api/rating")
+async def get_rating():
+    """获取 AI 每日评级（同一天内缓存结果）"""
+    today = datetime.now().strftime("%Y-%m-%d")
+
+    # 检查每日缓存
+    if today in _rating_cache:
+        return {"code": 0, "data": _rating_cache[today]}
+
+    # 并发获取数据
+    stock_data, news_list, kline_data = await asyncio.gather(
+        fetch_stock_data(),
+        fetch_news(),
+        fetch_kline_data(period="day", count=30),
+    )
+
+    # 没有 API Key 时返回默认中性评级
+    if not LLM_API_KEY:
+        fallback = {
+            "date": today,
+            "rating": "中性",
+            "score": 50,
+            "summary": "未配置 AI 大模型 API Key，无法生成智能评级。请在 .env 中配置 LLM_API_KEY 后重试。",
+            "factors": {
+                "technical": "无法分析",
+                "fundamental": "无法分析",
+                "sentiment": "无法分析",
+            },
+        }
+        _rating_cache[today] = fallback
+        return {"code": 0, "data": fallback}
+
+    # 构建评级 Prompt
+    news_text = "\n".join(
+        [f"- {n['title']}（{n['source']}）" for n in news_list[:12]]
+    ) or "暂无最新新闻"
+
+    kline_summary = ""
+    if kline_data:
+        recent = kline_data[-10:]
+        kline_summary = "近10个交易日行情:\n"
+        for k in recent:
+            kline_summary += (
+                f"  {k['date']}: 开{k['open']} 收{k['close']} "
+                f"高{k['high']} 低{k['low']}\n"
+            )
+
+    prompt = f"""你是一位资深港股分析师。请根据以下腾讯控股(00700.HK)最新数据，给出今日投资评级。
+
+## 当前股票数据
+- 当前价格: {stock_data.get('current_price', '--')} HKD
+- 涨跌幅: {stock_data.get('change_percent', '--')}%
+- 今开: {stock_data.get('open', '--')} 最高: {stock_data.get('high', '--')} 最低: {stock_data.get('low', '--')}
+- 成交量: {stock_data.get('volume', '--')}  成交额: {stock_data.get('turnover', '--')}
+- PE: {stock_data.get('pe_ratio', '--')}  PB: {stock_data.get('pb_ratio', '--')}
+- 市值: {stock_data.get('market_cap', '--')}亿
+- 换手率: {stock_data.get('turnover_rate', '--')}%  振幅: {stock_data.get('amplitude', '--')}%
+- 52周高: {stock_data.get('52w_high', '--')} 52周低: {stock_data.get('52w_low', '--')}
+
+{kline_summary}
+
+## 最新新闻
+{news_text}
+
+## 评级要求
+请严格以如下 JSON 格式返回（不要输出其他内容，仅返回 JSON）：
+{{
+  "rating": "强烈推荐/推荐/中性/谨慎/回避（五选一）",
+  "score": 0-100的整数评分,
+  "summary": "一句话评级理由（30字以内）",
+  "factors": {{
+    "technical": "技术面一句话判断（20字以内）",
+    "fundamental": "基本面一句话判断（20字以内）",
+    "sentiment": "消息面一句话判断（20字以内）"
+  }}
+}}
+
+评分参考: 强烈推荐 80-100, 推荐 60-79, 中性 40-59, 谨慎 20-39, 回避 0-19
+评级日期: {today}"""
+
+    try:
+        result_text = ""
+        req_body = {
+            "model": LLM_MODEL,
+            "messages": [
+                {"role": "system", "content": "你是一位资深港股分析师。请严格按要求的JSON格式返回评级结果，不要输出任何其他内容。"},
+                {"role": "user", "content": prompt},
+            ],
+            "temperature": 0.3,
+            "max_tokens": 2000,
+        }
+        if "2.5" in LLM_MODEL:
+            req_body["reasoning_effort"] = "low"
+
+        async with httpx.AsyncClient(timeout=httpx.Timeout(120, connect=15)) as client:
+            resp = await client.post(
+                f"{LLM_BASE_URL}/chat/completions",
+                headers={
+                    "Authorization": f"Bearer {LLM_API_KEY}",
+                    "Content-Type": "application/json",
+                },
+                json=req_body,
+            )
+            if resp.status_code == 200:
+                body = resp.json()
+                print(f"[Rating] API响应keys: {list(body.keys())}")
+                msg = body.get("choices", [{}])[0].get("message", {})
+                content = msg.get("content") or ""
+                # Gemini 2.5 thinking 模型可能在 parts 中返回
+                if not content and "parts" in msg:
+                    for part in msg["parts"]:
+                        if isinstance(part, dict) and part.get("text"):
+                            content = part["text"]
+                            break
+                result_text = content.strip()
+                print(f"[Rating] 提取到内容长度: {len(result_text)}, 前100字: {result_text[:100]}")
+            else:
+                err_body = resp.text[:300]
+                print(f"[Rating] API返回 {resp.status_code}: {err_body}")
+                raise Exception(f"API HTTP {resp.status_code}")
+
+        if not result_text:
+            raise Exception("AI返回内容为空")
+
+        # 解析 JSON（容错处理：去掉可能的 markdown 代码块标记）
+        cleaned = result_text
+        if "```" in cleaned:
+            # 提取第一个 ``` 和最后一个 ``` 之间的内容
+            import re
+            json_match = re.search(r"```(?:json)?\s*\n?(.*?)```", cleaned, re.DOTALL)
+            if json_match:
+                cleaned = json_match.group(1)
+        cleaned = cleaned.strip()
+
+        rating_data = json.loads(cleaned)
+
+        # 校验必要字段
+        valid_ratings = ["强烈推荐", "推荐", "中性", "谨慎", "回避"]
+        if rating_data.get("rating") not in valid_ratings:
+            rating_data["rating"] = "中性"
+        score = int(rating_data.get("score", 50))
+        rating_data["score"] = max(0, min(100, score))
+        rating_data["date"] = today
+
+        if "factors" not in rating_data:
+            rating_data["factors"] = {
+                "technical": "--",
+                "fundamental": "--",
+                "sentiment": "--",
+            }
+
+        _rating_cache[today] = rating_data
+        return {"code": 0, "data": rating_data}
+
+    except Exception as e:
+        print(f"[Rating] 评级异常: {e}")
+        fallback = {
+            "date": today,
+            "rating": "中性",
+            "score": 50,
+            "summary": f"AI 评级生成失败，请稍后重试。",
+            "factors": {
+                "technical": "--",
+                "fundamental": "--",
+                "sentiment": "--",
+            },
+        }
+        return {"code": 0, "data": fallback}
+
+
+# ---------------------------------------------------------------------------
 # 通用流式 LLM 调用
 # ---------------------------------------------------------------------------
 async def _stream_llm(system_prompt: str, user_prompt: str, max_tokens: int = 2000):
@@ -714,8 +897,24 @@ async def _stream_llm(system_prompt: str, user_prompt: str, max_tokens: int = 20
         yield "> ⚠️ 未配置 LLM_API_KEY，无法调用 AI 模型。\n"
         return
 
+    # 构建请求体
+    req_body = {
+        "model": LLM_MODEL,
+        "messages": [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt},
+        ],
+        "stream": True,
+        "temperature": 0.7,
+        "max_tokens": max_tokens,
+    }
+    # Gemini 2.5 thinking 模型: 用 low 限制思考 token，把更多配额给实际输出
+    if "2.5" in LLM_MODEL:
+        req_body["max_tokens"] = max(max_tokens, 8000)
+        req_body["reasoning_effort"] = "low"
+
     try:
-        async with httpx.AsyncClient(timeout=90) as client:
+        async with httpx.AsyncClient(timeout=httpx.Timeout(300, connect=15)) as client:
             async with client.stream(
                 "POST",
                 f"{LLM_BASE_URL}/chat/completions",
@@ -723,16 +922,7 @@ async def _stream_llm(system_prompt: str, user_prompt: str, max_tokens: int = 20
                     "Authorization": f"Bearer {LLM_API_KEY}",
                     "Content-Type": "application/json",
                 },
-                json={
-                    "model": LLM_MODEL,
-                    "messages": [
-                        {"role": "system", "content": system_prompt},
-                        {"role": "user", "content": user_prompt},
-                    ],
-                    "stream": True,
-                    "temperature": 0.7,
-                    "max_tokens": max_tokens,
-                },
+                json=req_body,
             ) as response:
                 if response.status_code != 200:
                     body = await response.aread()

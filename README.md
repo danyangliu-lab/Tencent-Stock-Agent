@@ -1,6 +1,6 @@
 # 腾讯股票小助手 AI Agent
 
-一个基于 AI 大模型的腾讯控股（00700.HK）实时股票分析系统。系统实时抓取中外全网腾讯相关新闻及港股行情数据，通过 AI 进行新闻摘要与深度分析，支持自定义提问。前端采用 Apple 设计风格，界面简洁优雅。
+一个基于 AI 大模型的腾讯控股（00700.HK）实时股票分析系统。系统实时抓取中外全网腾讯相关新闻及港股行情数据，通过 AI 进行新闻摘要、每日智能评级与深度分析，支持自定义提问。前端采用 Apple 设计风格，界面简洁优雅。
 
 ![Python](https://img.shields.io/badge/Python-3.9+-blue)
 ![FastAPI](https://img.shields.io/badge/FastAPI-0.109-green)
@@ -8,9 +8,9 @@
 
 ## 页面预览
 
-![页面上半部分 — 股票行情横条 + K线走势 + AI摘要 + 实时资讯](docs/screenshot-top.png)
+![页面上半部分 — 股票行情横条 + AI评级 + K线走势 + AI摘要 + 实时资讯](docs/screenshot-top.png)
 
-![页面下半部分 — AI深度分析 + 更多资讯](docs/screenshot-bottom.png)
+![页面下半部分 — AI深度分析 + 自定义提问 + 更多资讯](docs/screenshot-bottom.png)
 
 ---
 
@@ -53,6 +53,14 @@
 - 流式输出，带打字光标动画
 - **每小时自动刷新**，也可手动点击刷新按钮
 - 页面初始化时自动加载
+
+### ⭐ AI 每日智能评级
+- 基于实时行情、近 10 日 K 线和最新新闻，由 AI 综合给出每日投资评级
+- **五档评级**：强烈推荐 / 推荐 / 中性 / 谨慎 / 回避
+- **百分制评分**（0-100），圆形进度环可视化展示
+- 三维因子分析：**技术面** / **基本面** / **消息面** 各给出一句话判断
+- 同一交易日内评级结果缓存，避免重复调用
+- 评级横条紧随股票行情栏展示，一目了然
 
 ### 🧠 AI 深度分析 + 自定义提问
 - **一键生成分析报告**：综合股价、K 线、新闻等数据，输出六大板块：
@@ -127,10 +135,15 @@ graph TB
         GEMINI[Gemini / OpenAI / DeepSeek<br/>兼容 OpenAI 接口]
     end
 
+    subgraph 评级缓存 ["💾 评级缓存"]
+        RATING_CACHE[每日评级结果<br/>当日内不重复请求]
+    end
+
     UI -->|HTTP 请求| API
     JS -->|SSE 流式| API
     API --> Cache
     Cache --> API
+    API --> RATING_CACHE
 
     API -->|实时行情| SINA_HQ
     API -->|K线 / PE / 市值| TX_FIN
@@ -153,9 +166,11 @@ flowchart LR
         B --> B1[/api/stock/]
         B --> B2[/api/kline/]
         B --> B3[/api/news/]
+        B --> B4[/api/rating/]
         B1 --> C[渲染股票卡片]
         B2 --> D[绘制 K线图表]
         B3 --> E[渲染新闻列表]
+        B4 --> F1[渲染 AI 评级横条]
         E --> F[/api/summary/]
         F --> G[SSE 流式渲染<br/>AI 新闻摘要]
     end
@@ -183,14 +198,19 @@ flowchart LR
         U1[点击生成报告] --> REQ1[并发获取<br/>股票+新闻+K线]
         U2[输入自定义问题] --> REQ2[并发获取<br/>股票+新闻+K线]
         U3[自动/手动刷新摘要] --> REQ3[并发获取<br/>股票+新闻]
+        U4[页面加载/刷新] --> REQ4[并发获取<br/>股票+新闻+K线]
         REQ1 --> P1[构建分析 Prompt]
         REQ2 --> P2[构建提问 Prompt]
         REQ3 --> P3[构建摘要 Prompt]
+        REQ4 --> P4[构建评级 Prompt]
         P1 --> LLM_CALL[_stream_llm<br/>流式调用大模型]
         P2 --> LLM_CALL
         P3 --> LLM_CALL
+        P4 --> LLM_SYNC[同步调用大模型<br/>返回 JSON 评级]
         LLM_CALL --> SSE_OUT[_sse_wrap<br/>SSE 事件包装]
+        LLM_SYNC --> CACHE_R[缓存评级结果<br/>当日有效]
         SSE_OUT --> RENDER[前端 readSSEStream<br/>流式渲染 Markdown]
+        CACHE_R --> RENDER_R[前端渲染<br/>评级卡片]
     end
 ```
 
@@ -233,7 +253,7 @@ cp .env.example .env
 ```env
 LLM_API_KEY=your-gemini-api-key
 LLM_BASE_URL=https://generativelanguage.googleapis.com/v1beta/openai
-LLM_MODEL=gemini-3-flash-preview
+LLM_MODEL=gemini-2.5-flash
 ```
 
 > Gemini API Key 可在 [Google AI Studio](https://aistudio.google.com/apikey) 免费申请。
@@ -283,6 +303,7 @@ python -m uvicorn app:app --host 0.0.0.0 --port 8000 --reload
 | `GET` | `/api/news` | 获取腾讯相关中英文专业股票资讯（最多 25 条，含分类标签） |
 | `GET` | `/api/summary` | AI 新闻摘要（SSE 流式输出） |
 | `GET` | `/api/analysis` | AI 深度分析报告（SSE 流式输出） |
+| `GET` | `/api/rating` | AI 每日智能评级（JSON，当日缓存） |
 | `POST` | `/api/chat` | 自定义提问（SSE 流式输出，Body: `{"prompt": "你的问题"}` |
 | `POST` | `/api/refresh` | 清除缓存并重新抓取全部数据 |
 
@@ -326,6 +347,25 @@ data: {"content": "# 腾讯控股分析报告\n\n"}
 data: {"content": "## 1. 市场概览\n\n"}
 ...
 data: [DONE]
+```
+
+#### `GET /api/rating`
+
+```json
+{
+  "code": 0,
+  "data": {
+    "date": "2026-02-08",
+    "rating": "谨慎",
+    "score": 35,
+    "summary": "短期技术面偏弱，关注支撑位表现",
+    "factors": {
+      "technical": "均线空头排列，短期承压",
+      "fundamental": "估值合理，业务稳健",
+      "sentiment": "消息面偏空，市场情绪谨慎"
+    }
+  }
+}
 ```
 
 ---
